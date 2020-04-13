@@ -131,7 +131,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFro
 		MinRetentionDays:                    dc.GetIntProperty(dynamicconfig.MinRetentionDays, domain.MinRetentionDays),
 		VisibilityArchivalQueryMaxPageSize:  dc.GetIntProperty(dynamicconfig.VisibilityArchivalQueryMaxPageSize, 10000),
 		DisallowQuery:                       dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.DisallowQuery, false),
-		SendRawWorkflowHistory:              dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.SendRawWorkflowHistory, true),
+		SendRawWorkflowHistory:              dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.SendRawWorkflowHistory, false),
 	}
 }
 
