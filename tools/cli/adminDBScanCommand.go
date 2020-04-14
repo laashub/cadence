@@ -325,68 +325,69 @@ func scanShard(
 				report.Scanned = &ShardScanReportExecutionsScanned{}
 			}
 			report.Scanned.TotalExecutionsCount++
-			historyVerificationResult, history, historyBranch := verifyHistoryExists(
-				e,
-				branchDecoder,
-				corruptedExecutionWriter,
-				checkFailureWriter,
-				shardID,
-				limiter,
-				historyStore,
-				&report.TotalDBRequests,
-				execStore,
-				payloadSerializer)
-			switch historyVerificationResult {
-			case VerificationResultNoCorruption:
-				// nothing to do just keep checking other conditions
-			case VerificationResultDetectedCorruption:
-				report.Scanned.CorruptedExecutionsCount++
-				report.Scanned.CorruptionTypeBreakdown.TotalHistoryMissing++
-				if executionOpen(e.ExecutionInfo) {
-					report.Scanned.OpenCorruptions.TotalOpen++
-				}
-				continue
-			case VerificationResultCheckFailure:
-				report.Scanned.ExecutionCheckFailureCount++
-				continue
-			}
+			//historyVerificationResult, history, historyBranch := verifyHistoryExists(
+			//	e,
+			//	branchDecoder,
+			//	corruptedExecutionWriter,
+			//	checkFailureWriter,
+			//	shardID,
+			//	limiter,
+			//	historyStore,
+			//	&report.TotalDBRequests,
+			//	execStore,
+			//	payloadSerializer)
+			//switch historyVerificationResult {
+			//case VerificationResultNoCorruption:
+			//	// nothing to do just keep checking other conditions
+			//case VerificationResultDetectedCorruption:
+			//	report.Scanned.CorruptedExecutionsCount++
+			//	report.Scanned.CorruptionTypeBreakdown.TotalHistoryMissing++
+			//	if executionOpen(e.ExecutionInfo) {
+			//		report.Scanned.OpenCorruptions.TotalOpen++
+			//	}
+			//	continue
+			//case VerificationResultCheckFailure:
+			//	report.Scanned.ExecutionCheckFailureCount++
+			//	continue
+			//}
 
-			if history == nil || historyBranch == nil {
-				continue
-			}
+			//if history == nil || historyBranch == nil {
+			//	continue
+			//}
 
-			firstHistoryEventVerificationResult := verifyFirstHistoryEvent(
-				e,
-				historyBranch,
-				corruptedExecutionWriter,
-				checkFailureWriter,
-				shardID,
-				payloadSerializer,
-				history)
-			switch firstHistoryEventVerificationResult {
-			case VerificationResultNoCorruption:
-				// nothing to do just keep checking other conditions
-			case VerificationResultDetectedCorruption:
-				report.Scanned.CorruptionTypeBreakdown.TotalInvalidFirstEvent++
-				report.Scanned.CorruptedExecutionsCount++
-				if executionOpen(e.ExecutionInfo) {
-					report.Scanned.OpenCorruptions.TotalOpen++
-				}
-				continue
-			case VerificationResultCheckFailure:
-				report.Scanned.ExecutionCheckFailureCount++
-				continue
-			}
+			//firstHistoryEventVerificationResult := verifyFirstHistoryEvent(
+			//	e,
+			//	historyBranch,
+			//	corruptedExecutionWriter,
+			//	checkFailureWriter,
+			//	shardID,
+			//	payloadSerializer,
+			//	history)
+			//switch firstHistoryEventVerificationResult {
+			//case VerificationResultNoCorruption:
+			//	// nothing to do just keep checking other conditions
+			//case VerificationResultDetectedCorruption:
+			//	report.Scanned.CorruptionTypeBreakdown.TotalInvalidFirstEvent++
+			//	report.Scanned.CorruptedExecutionsCount++
+			//	if executionOpen(e.ExecutionInfo) {
+			//		report.Scanned.OpenCorruptions.TotalOpen++
+			//	}
+			//	continue
+			//case VerificationResultCheckFailure:
+			//	report.Scanned.ExecutionCheckFailureCount++
+			//	continue
+			//}
 
 			currentExecutionVerificationResult := verifyCurrentExecution(
 				e,
 				corruptedExecutionWriter,
 				checkFailureWriter,
 				shardID,
-				historyBranch,
 				execStore,
 				limiter,
-				&report.TotalDBRequests)
+				&report.TotalDBRequests,
+				payloadSerializer,
+				branchDecoder)
 			switch currentExecutionVerificationResult {
 			case VerificationResultNoCorruption:
 				// nothing to do just keep checking other conditions
@@ -560,11 +561,24 @@ func verifyCurrentExecution(
 	corruptedExecutionWriter BufferedWriter,
 	checkFailureWriter BufferedWriter,
 	shardID int,
-	branch *shared.HistoryBranch,
 	execStore persistence.ExecutionStore,
 	limiter *quotas.DynamicRateLimiter,
 	totalDBRequests *int64,
+	payloadSerializer persistence.PayloadSerializer,
+	branchDecoder *codec.ThriftRWEncoder,
 ) VerificationResult {
+	branch, err := getHistoryBranch(execution, payloadSerializer, branchDecoder)
+	if err != nil {
+		checkFailureWriter.Add(&ExecutionCheckFailure{
+			ShardID:    shardID,
+			DomainID:   execution.ExecutionInfo.DomainID,
+			WorkflowID: execution.ExecutionInfo.WorkflowID,
+			RunID:      execution.ExecutionInfo.RunID,
+			Note:       "failed to get history branch",
+			Details:    err.Error(),
+		})
+		return VerificationResultCheckFailure
+	}
 	if !executionOpen(execution.ExecutionInfo) {
 		return VerificationResultNoCorruption
 	}
